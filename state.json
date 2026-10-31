@@ -51,55 +51,55 @@
       "content": "Bootcamp",
       "due": "Sun 11 Oct",
       "release": "Wed 16 Sep",
-      "weight": "\u2014"
+      "weight": "—"
     },
     "GA1": {
       "content": "Week-1",
       "due": "Sun 18 Oct",
       "release": "Wed 07 Oct",
-      "weight": "\u2014"
+      "weight": "—"
     },
     "GA2": {
       "content": "Week-2",
       "due": "Sun 18 Oct",
       "release": "Wed 07 Oct",
-      "weight": "\u2014"
+      "weight": "—"
     },
     "GA3": {
       "content": "Week-3",
       "due": "Sat 31 Oct",
       "release": "Wed 21 Oct",
-      "weight": "\u2014"
+      "weight": "—"
     },
     "GA4": {
       "content": "Week-4",
-      "due": "Sun 15 Nov",
+      "due": "Sun 08 Nov",
       "release": "Wed 21 Oct",
-      "weight": "\u2014"
+      "weight": "—"
     },
     "GA5": {
       "content": "Week-5",
       "due": "Wed 18 Nov",
       "release": "Wed 04 Nov",
-      "weight": "\u2014"
+      "weight": "—"
     },
     "GA6": {
       "content": "Week-6",
       "due": "Mon 23 Nov",
       "release": "Wed 11 Nov",
-      "weight": "\u2014"
+      "weight": "—"
     },
     "GA7": {
       "content": "Week-7",
       "due": "Mon 30 Nov",
       "release": "Wed 18 Nov",
-      "weight": "\u2014"
+      "weight": "—"
     },
     "GA8": {
       "content": "Week-8",
       "due": "Mon 07 Dec",
       "release": "Wed 25 Nov",
-      "weight": "\u2014"
+      "weight": "—"
     },
     "P1": {
       "content": "Project 1",
@@ -121,6 +121,6 @@
     }
   },
   "term": "2026-09",
-  "updated_at": "2026-10-31T05:54:50+00:00",
+  "updated_at": "2026-10-31T06:15:43+00:00",
   "version": 1
 }
