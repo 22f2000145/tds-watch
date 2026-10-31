@@ -52,14 +52,14 @@ pip install -r requirements.txt
 export TELEGRAM_BOT_TOKEN="123456:ABC..."
 export TELEGRAM_CHAT_ID="987654321"
 
-python monitor.py --dry-run   # prints the message, saves the baseline
-python monitor.py             # same, but actually sends
+python monitor.py --dry-run   # preview the alert without saving anything
+python monitor.py             # first run saves a baseline, then notifies on changes
 python monitor.py --status    # show what is being watched
 ```
 
-The first run saves a baseline and sends one "Baseline saved" message, which
-also proves your credentials work. After that it stays quiet until something
-changes.
+The first real run saves a baseline and sends one "Baseline saved" message,
+which also proves your credentials work. After that it stays quiet until
+something changes.
 
 ## Telegram setup (2 minutes)
 
@@ -99,7 +99,7 @@ parse into {schedule: {...}, exams: {...}}
         ↓
 diff against state.json
         ↓
-no change → exit quietly (state still updated)
+no change → exit quietly, nothing written
 change    → format Telegram message → send → commit new state
 ```
 

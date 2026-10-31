@@ -191,16 +191,19 @@ def run(cfg: Config, force_seed: bool = False) -> Result:
             repo=cfg.repo,
         )
 
-    state.save(
-        cfg.state_path,
-        {
-            "term": term,
-            "last_commit": new_sha,
-            "schedule": schedule,
-            "exams": exams,
-            "updated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        },
-    )
+    # Only persist when the watched data actually changed. Writing on every run
+    # would make the Actions workflow commit a new state.json every hour.
+    if not cfg.dry_run and (seeded or schedule_changes or exam_changes):
+        state.save(
+            cfg.state_path,
+            {
+                "term": term,
+                "last_commit": new_sha,
+                "schedule": schedule,
+                "exams": exams,
+                "updated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            },
+        )
 
     sent = False
     if message:
