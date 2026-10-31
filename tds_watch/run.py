@@ -2,12 +2,33 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
 from . import notify, parse, sources, state
 from .config import Config
+
+_MONTHS = {
+    name: index
+    for index, name in enumerate(
+        ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"], start=1
+    )
+}
+
+
+def _date_key(text: str) -> tuple[int, int, int]:
+    """"Sun 08 Nov" -> (2000, 11, 8) so rows sort by calendar order, not alphabetically.
+
+    The term README omits the year for in-term dates; rows that spell it out
+    (e.g. "Sun 10 Jan 2027") keep it, so the end term does not jump to the top.
+    """
+    match = re.search(r"(\d{1,2})\s+([A-Za-z]{3})(?:\s+(\d{4}))?", text or "")
+    if not match:
+        return (9999, 13, 32)
+    year = int(match.group(3)) if match.group(3) else 2000
+    return (year, _MONTHS.get(match.group(2).title(), 13), int(match.group(1)))
 
 
 @dataclass
@@ -105,6 +126,26 @@ def collect(cfg: Config) -> tuple[str, dict[str, dict[str, str]], dict[str, Any]
         raw = sources.exam_info(term, exam_id)
         exams[exam_id] = parse.parse_exam(raw) if raw else None
     return term, schedule, exams, sources.commits(cfg.repo)
+
+
+def status_report(cfg: Config) -> str:
+    """Readable snapshot of what the parser sees right now. No notifications, no writes."""
+    term, schedule, exams, commits = collect(cfg)
+    live = sum(1 for value in exams.values() if value)
+    latest = commits[0].sha[:7] if commits else "unknown"
+    lines = [
+        f"term {term}  ·  {cfg.repo}  ·  latest commit {latest}",
+        f"{len(schedule)} schedule rows  ·  {live} of {len(exams)} assessment pages live",
+        "",
+        f"{'key':<6} {'release':<22} {'due':<24} page",
+        f"{'-' * 6} {'-' * 22} {'-' * 24} {'-' * 6}",
+    ]
+    for key in sorted(schedule, key=lambda k: (_date_key(schedule[k]["due"]), k)):
+        row = schedule[key]
+        exam_id = parse.exam_id_for(key)
+        page = "live" if exam_id and exams.get(exam_id) else "—"
+        lines.append(f"{key:<6} {row['release'] or '—':<22} {row['due'] or '—':<24} {page}")
+    return "\n".join(lines)
 
 
 def run(cfg: Config, force_seed: bool = False) -> Result:

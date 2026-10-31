@@ -54,6 +54,7 @@ export TELEGRAM_CHAT_ID="987654321"
 
 python monitor.py --dry-run   # prints the message, saves the baseline
 python monitor.py             # same, but actually sends
+python monitor.py --status    # show what is being watched
 ```
 
 The first run saves a baseline and sends one "Baseline saved" message, which
@@ -121,7 +122,7 @@ Two details that keep the signal high:
 | `STATE_PATH` | `state.json` | baseline file |
 | `DRY_RUN` | off | set `1` to log messages instead of sending (also works as a repo Actions *variable*) |
 
-CLI: `--dry-run` preview, `--seed` reset baseline silently.
+CLI: `--dry-run` preview, `--seed` reset baseline silently, `--status` show what is being watched.
 
 ## Maintenance notes
 
