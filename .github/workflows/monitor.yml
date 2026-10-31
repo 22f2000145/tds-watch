@@ -1,0 +1,48 @@
+name: TDS change monitor
+
+on:
+  schedule:
+    # Hourly at :17. GitHub's scheduler is best-effort and may run late.
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: tds-watch
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Check for changes
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          DRY_RUN: ${{ vars.DRY_RUN }}
+        run: python monitor.py
+
+      # The baseline lives in the repo so each run can compare against the last.
+      - name: Persist state
+        run: |
+          git add state.json
+          if git diff --cached --quiet; then
+            echo "State unchanged."
+            exit 0
+          fi
+          git config user.name "tds-watch"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore: update TDS monitor state [skip ci]"
+          git push
