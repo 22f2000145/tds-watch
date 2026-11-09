@@ -26,8 +26,8 @@
       "title": "TDS 2026 Sep GA3"
     },
     "ga4": {
-      "end": "2026-11-11T23:59:59+05:30",
-      "instructions_hash": "5d9004a90509c85e",
+      "end": "2026-11-15T23:59:59+05:30",
+      "instructions_hash": "4b9a69b9b3b2311e",
       "start": "2026-11-04T00:00:00+05:30",
       "title": "TDS 2026 Sep GA4"
     },
@@ -44,7 +44,7 @@
     "p2": null,
     "roe": null
   },
-  "last_commit": "f07e303017be599bbf0a8a8f3abe0167fe84b78e",
+  "last_commit": "f7147cb4f824ea7d9fd4be4ea85ffeb50d073bcb",
   "schedule": {
     "F": {
       "content": "Final end-term (in-person)",
@@ -78,7 +78,7 @@
     },
     "GA4": {
       "content": "Week-4",
-      "due": "Wed 11 Nov, 11:59 PM",
+      "due": "Sun 15 Nov, 11:59 PM",
       "release": "Wed 04 Nov",
       "weight": "—"
     },
@@ -126,6 +126,6 @@
     }
   },
   "term": "2026-09",
-  "updated_at": "2026-11-08T07:17:39+00:00",
+  "updated_at": "2026-11-09T06:23:54+00:00",
   "version": 1
 }
