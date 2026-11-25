@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
-from . import notify, parse, sources, state
+from . import cards, notify, parse, sources, state
 from .config import Config
 
 _MONTHS = {
@@ -157,6 +157,7 @@ def run(cfg: Config, force_seed: bool = False) -> Result:
     labels = _labels(schedule)
     released = sum(1 for value in exams.values() if value)
     new_sha = commits[0].sha if commits else (previous or {}).get("last_commit")
+    now = datetime.now(notify.IST)
 
     if seeded:
         schedule_changes: list[dict[str, Any]] = []
@@ -173,6 +174,7 @@ def run(cfg: Config, force_seed: bool = False) -> Result:
                 repo=cfg.repo,
                 seeded=True,
                 seeded_counts=(len(schedule), released),
+                now=now,
             )
         changes = 0
     else:
@@ -189,10 +191,33 @@ def run(cfg: Config, force_seed: bool = False) -> Result:
             commits=shown_commits,
             labels=labels,
             repo=cfg.repo,
+            now=now,
         )
 
-    # Only persist when the watched data actually changed. Writing on every run
-    # would make the Actions workflow commit a new state.json every hour.
+    sent = False
+    if message:
+        if cfg.dry_run:
+            print(message)
+        else:
+            card = None
+            if cfg.google_chat_webhook_url:
+                card = cards.build_card(
+                    term=term,
+                    schedule_changes=schedule_changes,
+                    exam_changes=exam_changes,
+                    commits=shown_commits,
+                    labels=labels,
+                    repo=cfg.repo,
+                    seeded=seeded,
+                    seeded_counts=(len(schedule), released),
+                    now=now,
+                )
+            notify.send_notifications(cfg, message, card=card)
+            sent = True
+
+    # Save only after every configured destination accepted the alert, so a failed
+    # delivery is retried on the next run. A successful destination may see a repeat
+    # if another failed. Quiet runs should not cause hourly state.json commits.
     if not cfg.dry_run and (seeded or schedule_changes or exam_changes):
         state.save(
             cfg.state_path,
@@ -204,15 +229,6 @@ def run(cfg: Config, force_seed: bool = False) -> Result:
                 "updated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             },
         )
-
-    sent = False
-    if message:
-        if cfg.dry_run:
-            print(message)
-        else:
-            token, chat_id = cfg.require_telegram()
-            notify.send(token, chat_id, message)
-            sent = True
 
     return Result(
         term=term,

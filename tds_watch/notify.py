@@ -1,15 +1,20 @@
-"""Format changes into a Telegram message and send it."""
+"""Format changes and send them to Telegram and/or a Google Chat space."""
 
 from __future__ import annotations
 
 import html
+import json
 from datetime import datetime, timedelta, timezone
+from html.parser import HTMLParser
 from typing import Any
 
 import requests
 
+from .config import Config
+
 IST = timezone(timedelta(hours=5, minutes=30))
 MAX_LENGTH = 3900  # Telegram's hard limit is 4096; leave room for truncation.
+GOOGLE_CHAT_MAX_BYTES = 32000
 
 FIELD_LABELS = {
     "due": "submission",
@@ -28,8 +33,8 @@ def _shorten(value: str, limit: int) -> str:
     return value if len(value) <= limit else value[: limit - 1] + "…"
 
 
-def _iso(value: str) -> str:
-    """'2026-11-17T23:59:59+05:30' -> '17 Nov 2026 23:59 IST'."""
+def format_timestamp(value: str) -> str:
+    """Format an ISO timestamp in IST; callers append the timezone label."""
     if not value:
         return "—"
     try:
@@ -109,8 +114,8 @@ def build_message(
             label = labels.get(change["id"], change["id"].upper())
             window = "opens" if change["field"] == "start" else "closes"
             lines.append(
-                f"• <b>{_esc(label)}</b> {window}: {_esc(_iso(change.get('old', '')))} → "
-                f"<b>{_esc(_iso(change.get('new', '')))}</b> IST"
+                f"• <b>{_esc(label)}</b> {window}: {_esc(format_timestamp(change.get('old', '')))} → "
+                f"<b>{_esc(format_timestamp(change.get('new', '')))}</b> IST"
             )
 
     retitled = [c for c in exam_changes if c["type"] == "changed" and c["field"] == "title"]
@@ -158,3 +163,95 @@ def send(token: str, chat_id: str, text: str) -> None:
         raise RuntimeError(f"Telegram request failed: {type(exc).__name__}") from exc
     if not response.ok:
         raise RuntimeError(f"Telegram rejected the message ({response.status_code}): {response.text[:300]}")
+
+
+class _GoogleChatMessage(HTMLParser):
+    """Translate the bold text and links produced by build_message to Chat markup."""
+
+    def __init__(self, *, plain: bool = False) -> None:
+        super().__init__(convert_charrefs=True)
+        self.parts: list[str] = []
+        self.link: str | None = None
+        self.plain = plain
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag == "b" and not self.plain:
+            self.parts.append("*")
+        elif tag == "a":
+            self.link = dict(attrs).get("href")
+            if self.link and not self.plain:
+                self.parts.append(f"<{self.link}|")
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == "b" and not self.plain:
+            self.parts.append("*")
+        elif tag == "a" and self.link:
+            self.parts.append(f" ({self.link})" if self.plain else ">")
+            self.link = None
+
+    def handle_data(self, data: str) -> None:
+        self.parts.append(data)
+
+
+def google_chat_text(text: str, *, plain: bool = False) -> str:
+    """Google Chat uses *bold* and <url|label>, not Telegram's HTML markup."""
+    message = _GoogleChatMessage(plain=plain)
+    message.feed(text)
+    message.close()
+    return "".join(message.parts)
+
+
+def google_chat_payload(text: str, *, card: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Use a rich card with a notification fallback, without duplicating its body."""
+    payload: dict[str, Any]
+    if card is not None:
+        payload = {
+            "fallbackText": google_chat_text(text, plain=True),
+            "cardsV2": [{"cardId": "tds-update", "card": card}],
+        }
+        if len(json.dumps(payload).encode("utf-8")) <= GOOGLE_CHAT_MAX_BYTES:
+            return payload
+
+    # Very large change sets still deliver as text instead of exceeding Chat's limit.
+    payload = {"text": google_chat_text(text)}
+    while len(json.dumps(payload).encode("utf-8")) > GOOGLE_CHAT_MAX_BYTES:
+        payload["text"] = payload["text"][: len(payload["text"]) // 2] + "…"
+    return payload
+
+
+def send_google_chat(webhook_url: str, text: str, *, card: dict[str, Any] | None = None) -> None:
+    """Post the notification to the space that owns the incoming webhook."""
+    try:
+        response = requests.post(
+            webhook_url,
+            json=google_chat_payload(text, card=card),
+            timeout=25,
+            allow_redirects=False,
+        )
+    except requests.RequestException as exc:
+        # The URL (and potentially the exception text) contains secret credentials.
+        raise RuntimeError(f"Google Chat request failed: {type(exc).__name__}") from None
+    if not 200 <= response.status_code < 300:
+        # Do not log the response body, which could echo the secret webhook URL.
+        raise RuntimeError(
+            f"Google Chat rejected the message ({response.status_code}). "
+            "Check the webhook URL and space permissions."
+        )
+
+
+def send_notifications(cfg: Config, text: str, *, card: dict[str, Any] | None = None) -> None:
+    """Try every configured destination; report failures after attempting both."""
+    cfg.require_notifications()
+    failures: list[str] = []
+    if cfg.token and cfg.chat_id:
+        try:
+            send(cfg.token, cfg.chat_id, text)
+        except RuntimeError as exc:
+            failures.append(str(exc))
+    if cfg.google_chat_webhook_url:
+        try:
+            send_google_chat(cfg.google_chat_webhook_url, text, card=card)
+        except RuntimeError as exc:
+            failures.append(str(exc))
+    if failures:
+        raise RuntimeError("; ".join(failures))

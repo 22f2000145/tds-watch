@@ -38,6 +38,7 @@ class Config:
     token: str | None = None
     chat_id: str | None = None
     dry_run: bool = False
+    google_chat_webhook_url: str | None = None
 
     @classmethod
     def from_env(cls) -> "Config":
@@ -49,6 +50,7 @@ class Config:
             token=(os.getenv("TELEGRAM_BOT_TOKEN", "").strip() or None),
             chat_id=(os.getenv("TELEGRAM_CHAT_ID", "").strip() or None),
             dry_run=_flag("DRY_RUN"),
+            google_chat_webhook_url=(os.getenv("GOOGLE_CHAT_WEBHOOK_URL", "").strip() or None),
         )
 
     def require_telegram(self) -> tuple[str, str]:
@@ -58,3 +60,13 @@ class Config:
                 "(use --dry-run to preview without them)."
             )
         return self.token, self.chat_id
+
+    def require_notifications(self) -> None:
+        """Require at least one destination and reject incomplete Telegram settings."""
+        if self.token or self.chat_id:
+            self.require_telegram()
+        if not (self.token and self.chat_id) and not self.google_chat_webhook_url:
+            raise RuntimeError(
+                "Set GOOGLE_CHAT_WEBHOOK_URL or both TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID "
+                "(use --dry-run to preview without them)."
+            )
