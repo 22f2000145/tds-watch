@@ -47,6 +47,70 @@ class TestCards(unittest.TestCase):
         self.assertIn("<b>Sun 15 Nov</b>", detail["text"])
         self.assertEqual(detail["bottomLabel"], "Previously: Sun 08 Nov")
         self.assertTrue(detail["wrapText"])
+        self.assertEqual(detail["button"]["onClick"]["openLink"]["url"], notify.exam_url("2026-09", "ga4"))
+
+    def test_schedule_buttons_target_the_assessment_that_changed(self) -> None:
+        for key, exam_id in (
+            ("GA5", "ga5"), ("GA6", "ga6"), ("GA7", "ga7"), ("P2", "p2"), ("ROE", "roe"), ("F", "et")
+        ):
+            with self.subTest(key=key):
+                self.args["schedule_changes"] = [
+                    {"type": "changed", "key": key, "field": "due", "old": "Old date", "new": "New date"}
+                ]
+                card = cards.build_card(**self.args)
+                buttons = card["sections"][-1]["widgets"][0]["buttonList"]["buttons"]
+                self.assertEqual(
+                    buttons[0]["onClick"]["openLink"]["url"],
+                    f"https://exam.sanand.workers.dev/tds-2026-09-{exam_id}",
+                )
+                self.assertNotIn("View course", [button["text"] for button in buttons])
+
+    def test_exam_buttons_target_the_assessment_that_changed(self) -> None:
+        for exam_id in ("ga5", "ga6", "ga7", "p2", "roe", "et"):
+            with self.subTest(exam_id=exam_id):
+                self.args["exam_changes"] = [{"type": "changed", "id": exam_id, "field": "instructions"}]
+                card = cards.build_card(**self.args)
+                buttons = card["sections"][-1]["widgets"][0]["buttonList"]["buttons"]
+                self.assertEqual(buttons[0]["onClick"]["openLink"]["url"], notify.exam_url("2026-09", exam_id))
+
+    def test_each_affected_assessment_has_one_footer_button(self) -> None:
+        self.args["schedule_changes"] = [
+            {"type": "changed", "key": "GA6", "field": "due", "old": "Old date", "new": "New date"},
+            {"type": "changed", "key": "P2", "field": "weight", "old": "10%", "new": "20%"},
+        ]
+        self.args["exam_changes"] = [
+            {"type": "changed", "id": "ga6", "field": "instructions"},
+            {"type": "released", "id": "roe", "title": "Remote Online Exam"},
+        ]
+        card = cards.build_card(**self.args)
+        buttons = card["sections"][-1]["widgets"][0]["buttonList"]["buttons"]
+        assessment_buttons = [button for button in buttons if button["text"].startswith("Open ")]
+        self.assertEqual(len(assessment_buttons), 3)
+        self.assertEqual(
+            {button["onClick"]["openLink"]["url"] for button in assessment_buttons},
+            {notify.exam_url("2026-09", exam_id) for exam_id in ("ga6", "p2", "roe")},
+        )
+
+    def test_assessment_buttons_use_the_current_term(self) -> None:
+        self.args["term"] = "2027-01"
+        self.args["exam_changes"] = [{"type": "released", "id": "ga6", "title": "GA6"}]
+        card = cards.build_card(**self.args)
+        button = card["sections"][-1]["widgets"][0]["buttonList"]["buttons"][0]
+        self.assertEqual(button["onClick"]["openLink"]["url"], "https://exam.sanand.workers.dev/tds-2027-01-ga6")
+
+    def test_unrecognized_schedule_rows_do_not_get_an_arbitrary_assessment_link(self) -> None:
+        self.args["schedule_changes"] = [
+            {"type": "changed", "key": "Orientation", "field": "due", "old": "Old date", "new": "New date"}
+        ]
+        card = cards.build_card(**self.args)
+        buttons = card["sections"][-1]["widgets"][0]["buttonList"]["buttons"]
+        self.assertEqual([button["text"] for button in buttons], ["View schedule"])
+
+    def test_withdrawn_assessments_do_not_get_broken_open_buttons(self) -> None:
+        self.args["schedule_changes"] = [{"type": "removed", "key": "GA5", "fields": {}}]
+        self.args["exam_changes"] = [{"type": "unreleased", "id": "ga5"}]
+        card = cards.build_card(**self.args)
+        self.assertNotIn(notify.exam_url("2026-09", "ga5"), json.dumps(card))
 
     def test_schedule_additions_and_removals(self) -> None:
         self.args["schedule_changes"] = [
@@ -127,11 +191,13 @@ class TestCards(unittest.TestCase):
         self.assertLessEqual(len(json.dumps(payload).encode("utf-8")), notify.GOOGLE_CHAT_MAX_BYTES)
 
     def test_test_card_is_clearly_a_setup_test(self) -> None:
-        card = cards.build_test_card(repo="example/course", now=self.args["now"])
+        card = cards.build_test_card(now=self.args["now"])
         self.assertEqual(card["header"]["title"], "TDS · Shared alerts connected")
         self.assertIn("Test notification", card["header"]["subtitle"])
         self.assertIn("not a new course update", card["sections"][0]["widgets"][0]["decoratedText"]["bottomLabel"])
         self.assertIn("does not change your saved baseline", json.dumps(card))
+        self.assertNotIn("View course", json.dumps(card))
+        self.assertNotIn("github.com", json.dumps(card))
 
 
 if __name__ == "__main__":

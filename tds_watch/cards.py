@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import Any
 
 from .notify import IST, exam_url, format_timestamp
+from .parse import exam_id_for
 
 MAX_DETAIL_WIDGETS = 50  # Leave ample room below Chat's 100-widget limit.
 AVATAR_URL = "https://developers.google.com/chat/images/chat-product-icon.png"
@@ -27,6 +28,23 @@ def _text(value: Any, limit: int = 240) -> str:
 
 def _button(label: str, url: str) -> dict[str, Any]:
     return {"text": label, "onClick": {"openLink": {"url": url}}}
+
+
+def _affected_assessments(
+    schedule_changes: list[dict[str, Any]],
+    exam_changes: list[dict[str, Any]],
+    labels: dict[str, str],
+) -> dict[str, str]:
+    """Resolve and deduplicate changed assessments, including schedule-only edits."""
+    withdrawn = {change["id"] for change in exam_changes if change["type"] == "unreleased"}
+    exam_ids = [change["id"] for change in exam_changes if change["type"] != "unreleased"]
+    exam_ids += [exam_id_for(change["key"]) for change in schedule_changes]
+    affected: dict[str, str] = {}
+    for exam_id in exam_ids:
+        if exam_id and exam_id not in withdrawn:
+            default_label = "End term" if exam_id == "et" else exam_id.upper()
+            affected.setdefault(exam_id, labels.get(exam_id, default_label))
+    return affected
 
 
 def _detail(
@@ -79,6 +97,7 @@ def build_card(
     now = now or datetime.now(IST)
     subtitle = f"Term {term} · {now.strftime('%d %b %Y · %H:%M IST')}"
     sections: list[dict[str, Any]] = []
+    affected = _affected_assessments(schedule_changes, exam_changes, labels)
     remaining = MAX_DETAIL_WIDGETS
     omitted = 0
 
@@ -141,6 +160,12 @@ def build_card(
     widgets = []
     for change in schedule_changes:
         key = _text(change["key"])
+        exam_id = exam_id_for(change["key"])
+        url = None
+        button_label = "Open assessment"
+        if exam_id and exam_id in affected:
+            url = exam_url(term, exam_id)
+            button_label = f"Open {affected[exam_id]}"
         if change["type"] == "changed":
             field = FIELD_LABELS.get(change["field"], change["field"])
             widgets.append(
@@ -149,13 +174,23 @@ def build_card(
                     f'<font color="#1a73e8"><b>{_text(change.get("new"))}</b></font>',
                     icon="INVITE",
                     note=f"Previously: {_text(change.get('old'))}",
+                    url=url,
+                    button_label=button_label,
                 )
             )
         elif change["type"] == "added":
             due = change.get("fields", {}).get("due") or "No date yet"
-            widgets.append(_detail(f"{key} · Added", f"<b>Due {_text(due)}</b>", icon="INVITE"))
+            widgets.append(
+                _detail(
+                    f"{key} · Added", f"<b>Due {_text(due)}</b>", icon="INVITE", url=url, button_label=button_label
+                )
+            )
         else:
-            widgets.append(_detail(f"{key} · Removed", "Removed from the schedule", icon="INVITE"))
+            widgets.append(
+                _detail(
+                    f"{key} · Removed", "Removed from the schedule", icon="INVITE", url=url, button_label=button_label
+                )
+            )
     section("📅 Schedule updates", widgets)
 
     widgets = []
@@ -215,11 +250,10 @@ def build_card(
         sections.append(
             {"widgets": [{"textParagraph": {"text": f"{omitted} more updates. See the source links below for details."}}]}
         )
-    buttons = [_button("View schedule", f"https://github.com/{repo}/blob/main/{term}/README.md")]
+    buttons = [_button(f"Open {label}", exam_url(term, exam_id)) for exam_id, label in affected.items()]
+    buttons.append(_button("View schedule", f"https://github.com/{repo}/blob/main/{term}/README.md"))
     if commits:
         buttons.append(_button("View commits", f"https://github.com/{repo}/commits/main"))
-    else:
-        buttons.append(_button("View course", f"https://github.com/{repo}"))
     sections.append(
         {
             "widgets": [
@@ -231,7 +265,7 @@ def build_card(
     return _card("TDS · Deadline Watch", subtitle, sections)
 
 
-def build_test_card(*, repo: str, now: datetime | None = None) -> dict[str, Any]:
+def build_test_card(*, now: datetime | None = None) -> dict[str, Any]:
     now = now or datetime.now(IST)
     sections = [
         {
@@ -255,10 +289,10 @@ def build_test_card(*, repo: str, now: datetime | None = None) -> dict[str, Any]
         },
         {
             "widgets": [
-                {"buttonList": {"buttons": [_button("View course", f"https://github.com/{repo}")]}},
                 {
                     "textParagraph": {
-                        "text": "<i>Only public course updates are shared. This test does not change your saved baseline.</i>"
+                        "text": "Real alerts include a direct link to each affected assessment.<br>"
+                        "<i>Only public course updates are shared. This test does not change your saved baseline.</i>"
                     }
                 },
             ]

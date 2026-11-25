@@ -53,7 +53,7 @@ def main(argv: list[str] | None = None) -> int:
                 print(message)
                 print("Preview only; no notifications sent.")
             else:
-                card = cards.build_test_card(repo=cfg.repo) if cfg.google_chat_webhook_url else None
+                card = cards.build_test_card() if cfg.google_chat_webhook_url else None
                 notify.send_notifications(cfg, message, card=card)
                 print("Test notification sent to all configured destinations.")
             return 0

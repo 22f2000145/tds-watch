@@ -127,15 +127,19 @@ Chat alerts use native **cards**, rather than a wall of text:
 - An at-a-glance update count, followed by separate deadline, schedule, new
   assessment, and instruction-edit sections.
 - New dates highlighted in blue, with previous dates underneath for comparison.
-- **Open assessment**, **View schedule**, and **View commits** buttons linking
-  directly to the public sources.
+- **Open GA6**, **Open P2**, **Open ROE**, etc. buttons linking to the exact
+  assessment that changed, including schedule-only edits. Multiple affected
+  assessments get separate buttons, using the current term in each URL.
+- **View schedule** and **View commits** remain clearly labeled source links;
+  there is no generic GitHub "View course" button.
 - Collapsible commit context to keep the important updates easy to scan.
 - A plain-text fallback for mobile notification previews. Very large change sets
   are bounded, with source links for details; oversized cards fall back to text.
 
 Telegram keeps its existing HTML-formatted alerts. The test command sends a
 matching setup card to Google Chat, clearly labeled as a test rather than a
-course change.
+course change. The setup card does not invent an assessment link when no
+assessment has changed.
 
 ## Deploy on GitHub Actions
 
